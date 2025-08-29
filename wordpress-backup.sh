@@ -1,16 +1,21 @@
 #!/bin/bash
 
+# Script Name: WordPress Backup Shell Script
+# Description: Automates the backup of WordPress files and database with logging and error reporting.
+# Author: elektrischerwalfisch
+# Version: 1.0
+
 # Define WordPress and backup configuration
-WP_FOLDER="path/to/wordpress"         # Path to your WordPress folder
-BACKUP_FOLDER="path/to/backups"       # Path to the backups folder
+WP_FOLDER="wordpress"                 # Path to your WordPress folder
+BACKUP_FOLDER="backups"               # Path to the backups folder
 LOG_FILE="$BACKUP_FOLDER/backup.log"  # Path to the log file
 MAX_BACKUPS=8                         # Maximum number of backups to keep
-USE_NO_TABLESPACES=0                  # Set to 1 to use "--no-tablespaces", 0 to disable (needed at some webhosters)
+USE_NO_TABLESPACES=1                  # Set to 1 to use "--no-tablespaces", 0 to disable
 
 # Email settings
-SEND_EMAIL_ON_ERROR=0                # Set to 1 to enable email notification on errors
-EMAIL_TO="youremail@example.com"     # Email address to send error reports
-EMAIL_SUBJECT="WordPress Backup Error Report"
+SEND_EMAIL_ON_ERROR=1                 # Set to 1 to enable email notification on errors
+EMAIL_TO="mymail@mywebsite.de"    # Email address to send error reports
+EMAIL_SUBJECT="WordPress Backup Error Report for www.mywebsite.de"
 EMAIL_BODY_FILE="/tmp/backup_error_email.txt"
 
 # Auto-detect database credentials from wp-config.php using AWK
@@ -27,9 +32,25 @@ log_message() {
 # Function to send an email in case of error
 send_email_if_error() {
   if [ "$SEND_EMAIL_ON_ERROR" -eq 1 ]; then
-    echo -e "Subject: $EMAIL_SUBJECT\n\n$(cat "$LOG_FILE")" > "$EMAIL_BODY_FILE"
-    /usr/sbin/sendmail "$EMAIL_TO" < "$EMAIL_BODY_FILE"
-    rm -f "$EMAIL_BODY_FILE" # Clean up temporary email file
+    EMAIL_BODY_FILE="/tmp/backup_error_email.txt"
+
+    # Write the required email content
+    echo "To: $EMAIL_TO" > "$EMAIL_BODY_FILE"
+    echo "Subject: $EMAIL_SUBJECT" >> "$EMAIL_BODY_FILE"
+    echo "" >> "$EMAIL_BODY_FILE"  # Empty line separates headers from the body
+    echo "The backup of your WordPress-Website failed with the following error(s):" >> "$EMAIL_BODY_FILE"
+    echo "" >> "$EMAIL_BODY_FILE"
+
+    # Filter and append only ERROR messages from the log file to the email body
+    grep "ERROR:" "$LOG_FILE" >> "$EMAIL_BODY_FILE"
+    echo "" >> "$EMAIL_BODY_FILE"
+    echo "Please investigate the issue for resolution." >> "$EMAIL_BODY_FILE"
+
+    # Send the email with sendmail
+    /usr/sbin/sendmail -t < "$EMAIL_BODY_FILE"
+
+    # Clean up temporary email body file
+    rm -f "$EMAIL_BODY_FILE"
   fi
 }
 
