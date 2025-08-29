@@ -154,7 +154,7 @@ define('DB_HOST', 'localhost'); // Or your specific database host
 3. **Permission Errors**
    - Ensure the user running the script has read/write permissions for `WP_FOLDER` and `BACKUP_FOLDER`.
 
-4. **When to Use USE_NO_TABLESPACES**
+### **When to Use USE_NO_TABLESPACES**
 
 The `USE_NO_TABLESPACES` variable controls whether the `--no-tablespaces` flag is included in the `mysqldump` command. This option is necessary in the following scenarios:
 1. You are backing up a **MySQL user** without the `PROCESS` privilege.
