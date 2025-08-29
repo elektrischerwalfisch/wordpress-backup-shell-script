@@ -1,9 +1,3 @@
-# Wordpress Backup Shell Script
-
-You're absolutely right—part of the `README.md` was cut off earlier! Below is the full and complete version of the README without any truncation.
-
----
-
 # WordPress Backup Shell Script
 
 ## Overview
@@ -175,7 +169,3 @@ Contributions are welcome! If you’d like to add features or fix issues, follow
 ## License
 
 This project is licensed under the **MIT License**. You are free to use, modify, and redistribute the code, but no warranty is provided for its functionality or suitability for specific purposes.
-
----
-
-Let me know if you need help refining this further! 😊
