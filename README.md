@@ -137,7 +137,13 @@ Please investigate the issue for resolution.
 
 1. **Empty or Incorrect Database Credentials**
    - Ensure the file `wp-config.php` has proper permissions and is in the folder specified by `WP_FOLDER`.
-
+   - Ensure that the `wp-config.php` file strictly follows the standard WordPress format for defining database credentials. The script relies on extracting these credentials from the file. The relevant lines in `wp-config.php` **must** look exactly like this, without additional spaces, tabs, or comments on the same line:
+```php
+define('DB_NAME', 'your_database_name');
+define('DB_USER', 'your_database_user');
+define('DB_PASSWORD', 'your_database_password');
+define('DB_HOST', 'localhost'); // Or your specific database host
+```
 2. **Cannot Send Emails**
    - Install the `sendmail` tool to enable email notifications:
      ```bash
@@ -148,21 +154,18 @@ Please investigate the issue for resolution.
 3. **Permission Errors**
    - Ensure the user running the script has read/write permissions for `WP_FOLDER` and `BACKUP_FOLDER`.
 
----
+4. **When to Use USE_NO_TABLESPACES**
 
-## Contributing
+The `USE_NO_TABLESPACES` variable controls whether the `--no-tablespaces` flag is included in the `mysqldump` command. This option is necessary in the following scenarios:
+1. You are backing up a **MySQL user** without the `PROCESS` privilege.
+   - The `PROCESS` privilege is required for dumping tablespaces, but shared hosting environments often restrict database users to prevent accessing such information.
+   - Enabling `USE_NO_TABLESPACES` ensures that `mysqldump` skips tablespace data, which is unnecessary for typical WordPress backups.
 
-Contributions are welcome! If you’d like to add features or fix issues, follow these steps:
-1. Fork the repository.
-2. Create a new branch:
-   ```bash
-   git checkout -b feature-or-bugfix
-   ```
-3. Make your changes and commit:
-   ```bash
-   git commit -m "Added feature X or fixed issue Y"
-   ```
-4. Push changes to your fork and submit a pull request.
+2. Your MySQL server does not use tablespaces.
+   - Most WordPress installations don't rely on MySQL tablespaces, which means this flag is safe to use.
+
+**Leave `USE_NO_TABLESPACES=1` enabled by default** unless you know your database user has the `PROCESS` privilege and tablespaces are actively used.
+
 
 ---
 
