@@ -1,2 +1,3 @@
-.vscode
-.onions
+# Sensitive configuration files
+scripts/.env*
+trigger/.htaccess
