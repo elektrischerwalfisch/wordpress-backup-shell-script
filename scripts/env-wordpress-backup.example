@@ -16,6 +16,9 @@ BACKUP_FOLDER="/path/to/wordpress-backups"
 # LOG_FILE="/custom/path/to/backup.log"
 MAX_BACKUPS=8                         # Maximum number of backups to keep
 USE_NO_TABLESPACES=1                  # Set to 1 to use "--no-tablespaces", 0 to disable
+                                      # Recommended: 1 (enabled) for shared hosting (IONOS, all-inkl, etc.)
+                                      # Required for MySQL 8.0+ users without PROCESS privilege
+                                      # Set to 0 only if you have full MySQL privileges and need tablespace data
 
 # Email notification settings
 SEND_EMAIL_ON_ERROR=1                 # Set to 1 to enable email notification on errors
