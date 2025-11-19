@@ -292,8 +292,23 @@ log_message "Backup target folder: $BACKUP_TARGET"
 # Step 1: Create a zipped backup of the WordPress folder
 ZIP_FILE="$BACKUP_TARGET/files.zip"
 if zip -r "$ZIP_FILE" "$WP_FOLDER" > /dev/null 2>&1; then
+  # Verify the archive was created and is not empty
+  if [ ! -f "$ZIP_FILE" ]; then
+    log_message "ERROR: Archive file was not created: $ZIP_FILE"
+    send_email_if_error
+    exit 1
+  fi
+  
   # Get file size using stat (more reliable in shared hosting)
-  ZIP_SIZE=$(stat -c %s "$ZIP_FILE" 2>/dev/null | awk '{if($1>1024*1024*1024) printf "%.1fG", $1/1024/1024/1024; else if($1>1024*1024) printf "%.1fM", $1/1024/1024; else if($1>1024) printf "%.1fK", $1/1024; else printf "%dB", $1}' || echo "unknown")
+  ZIP_SIZE_BYTES=$(stat -c %s "$ZIP_FILE" 2>/dev/null || echo "0")
+  ZIP_SIZE=$(echo "$ZIP_SIZE_BYTES" | awk '{if($1>1024*1024*1024) printf "%.1fG", $1/1024/1024/1024; else if($1>1024*1024) printf "%.1fM", $1/1024/1024; else if($1>1024) printf "%.1fK", $1/1024; else printf "%dB", $1}' || echo "unknown")
+  
+  # Check if archive seems too small (less than 100MB might indicate incomplete backup)
+  if [ "$ZIP_SIZE_BYTES" -lt 104857600 ] && [ "$ZIP_SIZE_BYTES" -gt 0 ]; then
+    log_message "WARNING: Archive size seems unusually small: $ZIP_SIZE ($ZIP_SIZE_BYTES bytes)"
+    log_message "This might indicate an incomplete backup. Please verify manually."
+  fi
+  
   log_message "WordPress files successfully backed up: $ZIP_FILE (Size: $ZIP_SIZE)"
 else
   log_message "ERROR: WordPress files backup FAILED!"
