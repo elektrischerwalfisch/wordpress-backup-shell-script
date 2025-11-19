@@ -107,6 +107,7 @@ wordpress-backup-shell-script/
    - Access the URL via browser or configure it as a URL-based cronjob in your hosting panel
    - **Configuration**: Edit `trigger/wordpress-backup.php` to configure:
      - Script path (default: `../scripts/wordpress-backup.sh`)
+     - Execution mode: `'sync'` (default, for all-inkl) or `'background'` (for IONOS to avoid timeouts)
 
 5. Secure the PHP trigger (recommended):
    
@@ -190,11 +191,27 @@ The PHP trigger script (`trigger/wordpress-backup.php`) can be configured to wor
 | **Option** | **Description** | **Default** |
 |------------|-----------------|-------------|
 | `$shellScriptPath` | Path to the shell script (relative to PHP file). Change if your script is in a different location. | `../scripts/wordpress-backup.sh` |
+| `$executionMode` | Execution mode: `'sync'` (waits for completion, default) or `'background'` (runs in background). | `'sync'` |
+
+### Execution Modes
+
+- **`'sync'`** (Synchronous, Default): 
+  - Waits for script completion
+  - Returns full output
+  - Works well on all-inkl.com
+  - May timeout on IONOS for large backups
+
+- **`'background'`** (Background):
+  - Runs script in background (detached from PHP process)
+  - Returns PID immediately
+  - Recommended for IONOS to avoid timeout issues
+  - Check `BACKUP_FOLDER/backup.log` for progress
+  - Falls back to sync mode if background execution fails
 
 The PHP trigger script will:
 - Automatically set execute permissions on the shell script
 - Execute the backup script in a login shell environment
-- Return the output and exit code
+- Return the output and exit code (sync mode) or PID (background mode)
 - Display success or error messages
 
 ---
