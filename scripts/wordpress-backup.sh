@@ -301,21 +301,69 @@ else
   exit 1
 fi
 
-# Step 2: Compress and dump the database
+# Step 2: Create a database backup using mysqldump
+log_message "Creating database backup using mysqldump..."
+
 DB_BACKUP_FILE="$BACKUP_TARGET/database.sql.gz"
 
+# Build tablespace option based on configuration
 if [ "$USE_NO_TABLESPACES" -eq 1 ]; then
   TABLESPACE_OPTION="--no-tablespaces"
 else
   TABLESPACE_OPTION=""
 fi
 
-if mysqldump -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" $TABLESPACE_OPTION "$DB_NAME" | gzip > "$DB_BACKUP_FILE"; then
-  # Get file size using stat (more reliable in shared hosting)
-  DB_SIZE=$(stat -c %s "$DB_BACKUP_FILE" 2>/dev/null | awk '{if($1>1024*1024*1024) printf "%.1fG", $1/1024/1024/1024; else if($1>1024*1024) printf "%.1fM", $1/1024/1024; else if($1>1024) printf "%.1fK", $1/1024; else printf "%dB", $1}' || echo "unknown")
+# Create database backup using mysqldump
+# Capture stderr separately to capture any error messages
+MYSQLDUMP_ERR_FILE="$BACKUP_TARGET/mysqldump_error.log"
+
+# Compressed backup (WordPress always uses gzip)
+mysqldump -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" $TABLESPACE_OPTION "$DB_NAME" 2> "$MYSQLDUMP_ERR_FILE" | gzip > "$DB_BACKUP_FILE"
+MYSQLDUMP_EXIT_CODE=${PIPESTATUS[0]}
+
+if [ $MYSQLDUMP_EXIT_CODE -eq 0 ]; then
+  # Verify the backup file was created and is not empty
+  if [ ! -f "$DB_BACKUP_FILE" ]; then
+    log_message "ERROR: Database backup file was not created: $DB_BACKUP_FILE"
+    send_email_if_error
+    exit 1
+  fi
+  
+  # Get file size
+  DB_SIZE_BYTES=$(stat -c %s "$DB_BACKUP_FILE" 2>/dev/null || echo "0")
+  DB_SIZE=$(echo "$DB_SIZE_BYTES" | awk '{if($1>1024*1024*1024) printf "%.1fG", $1/1024/1024/1024; else if($1>1024*1024) printf "%.1fM", $1/1024/1024; else if($1>1024) printf "%.1fK", $1/1024; else printf "%dB", $1}' || echo "unknown")
+  
+  # Check if backup seems too small (less than 1KB might indicate an error)
+  if [ "$DB_SIZE_BYTES" -lt 1024 ] && [ "$DB_SIZE_BYTES" -gt 0 ]; then
+    log_message "WARNING: Database backup size seems unusually small: $DB_SIZE ($DB_SIZE_BYTES bytes)"
+    log_message "This might indicate an incomplete backup. Please verify manually."
+  fi
+  
   log_message "Database successfully backed up: $DB_BACKUP_FILE (Size: $DB_SIZE)"
+  
+  # Clean up error file if backup was successful
+  rm -f "$MYSQLDUMP_ERR_FILE" 2>/dev/null || true
 else
-  log_message "ERROR: Database backup FAILED! Check credentials and database configuration."
+  log_message "ERROR: WordPress database backup FAILED! (mysqldump exit code: $MYSQLDUMP_EXIT_CODE)"
+  # Log error output if available
+  if [ -f "$MYSQLDUMP_ERR_FILE" ] && [ -s "$MYSQLDUMP_ERR_FILE" ]; then
+    log_message "mysqldump error output:"
+    while IFS= read -r line; do
+      log_message "  $line"
+    done < "$MYSQLDUMP_ERR_FILE"
+  fi
+  # Also check if partial file was created and log its content if small
+  if [ -f "$DB_BACKUP_FILE" ]; then
+    DB_SIZE_BYTES=$(stat -c %s "$DB_BACKUP_FILE" 2>/dev/null || echo "0")
+    if [ "$DB_SIZE_BYTES" -lt 10240 ]; then
+      log_message "Partial backup file content (first 20 lines):"
+      head -n 20 "$DB_BACKUP_FILE" 2>/dev/null | while IFS= read -r line; do
+        log_message "  $line"
+      done || true
+    fi
+  fi
+  # Clean up error file
+  rm -f "$MYSQLDUMP_ERR_FILE" 2>/dev/null || true
   send_email_if_error
   exit 1
 fi
