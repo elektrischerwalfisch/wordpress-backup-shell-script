@@ -1,8 +1,8 @@
 # Changelog
 
-All notable changes to this project are documented in this file.
-
 ## [Unreleased]
+
+## [0.2.0] - 2026-07-08
 
 - feat: Add configurable compression methods for WordPress backups
 
