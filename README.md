@@ -4,6 +4,11 @@ Automated WordPress file + database backups for shared hosting with configurable
 
 Developed for shared hosting, tested on all-inkl and IONOS.
 
+> **Key characteristic**
+> This tool runs fully server-side and independently from WordPress internals.
+> It does not require a WordPress plugin, theme integration, or admin access.
+> It also works on shared hosting without SSH by using the PHP trigger.
+
 ---
 
 ## Quickstart

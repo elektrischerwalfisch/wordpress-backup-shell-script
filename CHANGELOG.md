@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- docs: Highlight server-side and SSH-free usage in README
 - refactor: Remove legacy ENABLE_COMPRESSION compatibility from script and docs
 - docs: Simplify README structure and reduce setup verbosity
 - docs: Remove unstable .htaccess IP allowlist guidance for trigger protection on shared hosting
