@@ -31,7 +31,7 @@ wordpress-backup-shell-script/
 ### Directory Purpose
 
 - **`scripts/`**: Contains the main shell script and configuration files. This directory should **not** be publicly accessible via web URL to protect the backup script and sensitive configuration.
-- **`trigger/`**: Contains PHP scripts that can be called via URL to execute the backup script. This directory is publicly accessible but should be protected via `.htaccess` to restrict access to authorized IP addresses (e.g., the cronjob server IP).
+- **`trigger/`**: Contains PHP scripts that can be called via URL to execute the backup script. This directory is publicly accessible. Static `.htaccess` IP allowlists are currently considered unstable on shared hosting (cronjob source IP can change), so trigger authentication is tracked as a TODO for a more robust method.
 
 ---
 
@@ -117,33 +117,7 @@ wordpress-backup-shell-script/
 
 5. Secure the PHP trigger (recommended):
    
-   To protect the PHP trigger script from unauthorized access, add a `.htaccess` file in the `trigger/` directory that restricts access to specific IP addresses (e.g., the IP of your cronjob server):
-   
-   **Option A**: Copy the example file and edit it (if available):
-   ```bash
-   cp trigger/.htaccess.example trigger/.htaccess
-   nano trigger/.htaccess
-   ```
-   
-   **Option B**: Create the file manually with the following content:
-   ```apache
-   # Block all access by default
-   Order Deny,Allow
-   Deny from all
-   
-   # Allow access only for specific IPs (replace with your actual cronjob server IP)
-   # Example: Allow from 85.13.130.203
-   Allow from YOUR_CRONJOB_SERVER_IP
-   ```
-   
-   **Note**: For Apache 2.4+, use `Require` syntax instead:
-   ```apache
-   # Require ip YOUR_CRONJOB_SERVER_IP
-   # Example: Require ip 85.13.130.203
-   Require ip YOUR_CRONJOB_SERVER_IP
-   ```
-   
-   **Important**: Replace `YOUR_CRONJOB_SERVER_IP` with the actual IP address of your cronjob server. You can find this IP in your hosting panel's cronjob settings or by checking the server logs.
+   For current trigger security limitations and the planned follow-up, see [Trigger Security (Current Limitations & TODO)](#trigger-security-current-limitations--todo).
 
 6. (Optional) Add a cronjob for automation:
    
@@ -160,7 +134,22 @@ wordpress-backup-shell-script/
    - Configure a URL-based cronjob in your hosting panel
    - **Important**: Use only the `trigger/` directory URL, never the `scripts/` directory
    - Example: `https://yourdomain.com/cronjobs/wordpress-backup-shell-script/trigger/wordpress-backup.php`
-   - The `.htaccess` file will protect the trigger from unauthorized access
+   - See [Trigger Security (Current Limitations & TODO)](#trigger-security-current-limitations--todo)
+
+---
+
+## Trigger Security (Current Limitations & TODO)
+
+**Current status:** IP-based `.htaccess` allowlists for shared-hosting cronjobs are currently not reliable, because the cronjob source IP can change over time.
+
+For now:
+- Keep trigger access controls minimal and monitor trigger access via logs.
+- Do not rely on static cronjob IP allowlists as the primary security layer.
+- Track this as an open item until a more stable authentication method is implemented.
+
+Planned follow-up:
+- Add a robust trigger authentication method that does not depend on fixed cronjob IPs.
+- Document the new method here once implemented.
 
 ---
 
@@ -362,7 +351,7 @@ define('DB_HOST', 'localhost'); // Or your specific database host
    - Ensure the user running the script has read/write permissions for `WP_FOLDER` and `BACKUP_FOLDER`.
    - If you don't have SSH access, use the PHP trigger file (`trigger/wordpress-backup.php`) which will set execute permissions automatically.
    - The config file `.env-wordpress-backup` should have permissions `600` (read/write for owner only).
-   - **Security**: Never expose the `scripts/` directory via web URL. Only the `trigger/` directory should be accessible via URL, and it should be protected with `.htaccess` to restrict access to authorized IP addresses.
+  - **Security**: Never expose the `scripts/` directory via web URL. Only the `trigger/` directory should be accessible via URL. See [Trigger Security (Current Limitations & TODO)](#trigger-security-current-limitations--todo).
 
 5. **Backup File Too Large**
    - WordPress backups can become very large, especially with many media files.

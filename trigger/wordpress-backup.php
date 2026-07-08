@@ -12,7 +12,7 @@
  * 3. Call this script via URL with a cronjob or via browser
  *
  * SECURITY:
- * - Restrict access via .htaccess to authorized IP addresses (recommended)
+ * - See README section "Trigger Security (Current Limitations & TODO)".
  */
 
 // ============================================================================

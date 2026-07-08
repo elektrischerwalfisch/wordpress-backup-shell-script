@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- docs: Remove unstable .htaccess IP allowlist guidance for trigger protection on shared hosting
+
 ## [0.2.0] - 2026-07-08
 
 - feat: Add configurable compression methods for WordPress backups
