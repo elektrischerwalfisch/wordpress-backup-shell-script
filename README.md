@@ -2,8 +2,8 @@
 
 ## Overview
 This script automates WordPress backup creation by:
-1. Zipping the WordPress folder (files and uploads).
-2. Creating a compressed MySQL database backup.
+1. Archiving the WordPress folder (files and uploads) using a configurable compression method.
+2. Creating a MySQL database backup with the same compression method.
 3. Managing backup retention with automatic cleanup.
 4. Sending email alerts in case of errors.
 
@@ -36,8 +36,9 @@ wordpress-backup-shell-script/
 ---
 
 ## Features
-- **File Backup**: Automatically zips the WordPress folder.
-- **Database Dump**: Creates a compressed MySQL database dump (`.sql.gz`).
+- **Configurable Compression**: Supports `none`, `gzip`, `zip`, and `bzip2` via `COMPRESSION_METHOD`.
+- **File Backup**: Archives the WordPress folder using the selected compression method.
+- **Database Dump**: Creates a MySQL database dump matching the selected compression method.
 - **Detailed Error Handling**: Comprehensive mysqldump error capture and validation.
 - **File Size Validation**: Warns if backup files seem unusually small (indicates potential issues).
 - **Retention Policy**: Keeps a fixed number of backups (`MAX_BACKUPS`), deleting old backups automatically.
@@ -49,7 +50,11 @@ wordpress-backup-shell-script/
 ## Requirements
 1. **Tools Needed**:
    - `mysqldump`: To create MySQL database dumps.
-   - `zip` and `grep`: Standard Unix tools.
+   - `tar`: Required for `none`, `gzip`, and `bzip2` file backups.
+   - `gzip`: Required when `COMPRESSION_METHOD="gzip"`.
+   - `zip`: Required when `COMPRESSION_METHOD="zip"`.
+   - `bzip2`: Required when `COMPRESSION_METHOD="bzip2"`.
+   - `nice`: Optional; used when `USE_NICE_FOR_TAR=1` for tar-based methods.
    - `curl`: For SMTP email notifications (recommended for shared hosting).
    - `sendmail`: Optional fallback for email notifications.
 2. **Permissions**: The user running the script must have read/write access to the directories.
@@ -81,6 +86,7 @@ wordpress-backup-shell-script/
    **Important variables to configure:**
    - `WP_FOLDER`: Path to your WordPress folder (use absolute paths!)
    - `BACKUP_FOLDER`: Path to store backups (use absolute paths!)
+   - `COMPRESSION_METHOD`: Backup compression method (`none`, `gzip`, `zip`, `bzip2`; default: `gzip`)
    - `USE_NO_TABLESPACES`: Set to `1` for shared hosting (default: 1)
    - Email settings: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, `EMAIL_TO`
    
@@ -169,7 +175,9 @@ All configuration is done via the `.env-wordpress-backup` file in the `scripts/`
 | `LOG_FILE`          | Optional: Path to the log file. Defaults to `$BACKUP_FOLDER/backup.log` if not specified. |
 | `MAX_BACKUPS`       | Maximum number of backups to keep (older backups will be deleted automatically). Default: 8 |
 | `USE_NO_TABLESPACES`| Set to `1` to include `--no-tablespaces` in `mysqldump`. Use `0` to disable it. Default: 1 (recommended for shared hosting) |
-| `EXCLUDES`          | Space-separated list of paths to exclude from the zip archive (relative to WP_FOLDER). Default: empty (no excludes). Example: `"wp-content/cache wp-content/upgrade wp-content/backups"` |
+| `COMPRESSION_METHOD`| Backup compression method: `none`, `gzip`, `zip`, or `bzip2`. Default: `gzip` |
+| `USE_NICE_FOR_TAR`  | Set to `1` to run tar with reduced CPU priority for tar-based methods (`none`, `gzip`, `bzip2`). Default: 1. Not used for `zip`. |
+| `EXCLUDES`          | Space-separated list of paths to exclude from file archives (relative to WP_FOLDER). Default: empty (no excludes). Example: `"wp-content/cache wp-content/upgrade wp-content/backups"` |
 | `SEND_EMAIL_ON_ERROR`| Set to `1` to enable email notifications on errors. Default: 1 |
 | `EMAIL_SUBJECT_DEFAULT`| Subject line for error notification emails. |
 | `SMTP_HOST`         | SMTP server hostname (e.g., `mail.yourdomain.tld`). |
@@ -180,6 +188,22 @@ All configuration is done via the `.env-wordpress-backup` file in the `scripts/`
 | `EMAIL_TO`          | Email address to send error reports to when the backup fails. |
 
 **Security Note**: The `.env-wordpress-backup` file contains sensitive credentials and is automatically excluded from version control via `.gitignore`. Keep the file permissions set to `600` (read/write for owner only).
+
+---
+
+## Compression Methods and Output Files
+
+| **Method** | **File backup**      | **Database backup**   |
+|------------|----------------------|-----------------------|
+| `none`     | `files.tar`          | `database.sql`        |
+| `gzip`     | `files.tar.gz`       | `database.sql.gz`     |
+| `zip`      | `files.zip`          | `database.sql.zip`    |
+| `bzip2`    | `files.tar.bz2`      | `database.sql.bz2`    |
+
+Notes:
+- For `zip` database backups, the internal SQL file keeps a timestamp in the filename (for example `database-2025-08-29.sql`).
+- If the selected method or required tool is unavailable, the script stops with a clear error (no fallback).
+- Legacy configs using `ENABLE_COMPRESSION` are still supported and map to `gzip` (`1`) or `none` (`0`).
 
 ---
 
@@ -214,6 +238,7 @@ The PHP trigger script will:
 - Execute the backup script in a login shell environment
 - Return the output and exit code (sync mode) or PID (background mode)
 - Display success or error messages
+- On errors, include hints about `COMPRESSION_METHOD` and the backup log file
 
 ---
 
@@ -221,11 +246,13 @@ The PHP trigger script will:
 
 ### Step-by-Step Actions
 1. Create a timestamped backup folder inside `BACKUP_FOLDER`.
-2. Zip the WordPress files into `files.zip`:
+2. Archive WordPress files according to `COMPRESSION_METHOD`:
    - Automatically excludes paths specified in `EXCLUDES` (if configured).
+   - Uses tar-based archiving for `none`, `gzip`, and `bzip2`; uses `zip` for `zip`.
+   - Applies `nice` for tar-based methods when `USE_NICE_FOR_TAR=1`.
    - Validates that the archive was created successfully.
    - Checks file size and warns if backup seems unusually small (< 100MB).
-3. Create a compressed MySQL dump (`database.sql.gz`):
+3. Create a MySQL dump using the same compression method:
    - Automatically extract credentials from `wp-config.php`.
    - Includes detailed error handling with separate error log capture.
    - Validates backup file creation and size.
@@ -249,7 +276,9 @@ A successful backup will generate log entries like this:
 2025-08-29 15:30:01 - Starting backup for 2025-08-29...
 2025-08-29 15:30:01 - WordPress folder: /path/to/wordpress
 2025-08-29 15:30:01 - Backup target folder: /path/to/backups/2025-08-29
-2025-08-29 15:30:15 - WordPress files successfully backed up: /path/to/backups/2025-08-29/files.zip (Size: 50M)
+2025-08-29 15:30:01 - Compression method: gzip
+2025-08-29 15:30:01 - USE_NICE_FOR_TAR: 1
+2025-08-29 15:30:15 - WordPress files successfully backed up: /path/to/backups/2025-08-29/files.tar.gz (Size: 50M)
 2025-08-29 15:30:20 - Creating database backup using mysqldump...
 2025-08-29 15:30:25 - Database successfully backed up: /path/to/backups/2025-08-29/database.sql.gz (Size: 2M)
 2025-08-29 15:30:30 - Deleted oldest backup: 2025-08-20 to maintain a maximum of 8 backups.
@@ -324,28 +353,18 @@ define('DB_HOST', 'localhost'); // Or your specific database host
      ```
    - Ensure your server is properly configured to send emails.
 
-3. **Permission Errors**
+3. **Compression Method Errors**
+   - Verify `COMPRESSION_METHOD` is one of: `none`, `gzip`, `zip`, `bzip2`.
+   - Ensure required tools are installed for the selected method (`tar`, `gzip`, `zip`, or `bzip2`).
+   - Check `BACKUP_FOLDER/backup.log` for detailed error output.
+
+4. **Permission Errors**
    - Ensure the user running the script has read/write permissions for `WP_FOLDER` and `BACKUP_FOLDER`.
    - If you don't have SSH access, use the PHP trigger file (`trigger/wordpress-backup.php`) which will set execute permissions automatically.
    - The config file `.env-wordpress-backup` should have permissions `600` (read/write for owner only).
    - **Security**: Never expose the `scripts/` directory via web URL. Only the `trigger/` directory should be accessible via URL, and it should be protected with `.htaccess` to restrict access to authorized IP addresses.
 
-4. **Backup File Too Large**
-   - WordPress backups can become very large, especially with many media files.
-   - Consider excluding certain directories if you have SSH access and can modify the script.
-   - For very large sites, consider using incremental backups or cloud storage solutions.
-
-5. **Warnings About Small Backup Size**
-   - If you see warnings about unusually small backup files, verify that:
-     - The WordPress folder contains the expected files
-     - The database is not empty
-     - The backup process completed successfully
-   - Small backups might indicate:
-     - An incomplete backup
-     - A new/empty WordPress installation
-     - A problem with the backup process
-
-4. **Backup File Too Large**
+5. **Backup File Too Large**
    - WordPress backups can become very large, especially with many media files.
    - Use the `EXCLUDES` variable in `.env-wordpress-backup` to exclude unnecessary directories:
      ```
@@ -354,7 +373,7 @@ define('DB_HOST', 'localhost'); // Or your specific database host
    - Common directories to exclude: `wp-content/cache`, `wp-content/upgrade`, `wp-content/backups`, `wp-content/backup-db`
    - For very large sites, consider using incremental backups or cloud storage solutions.
 
-5. **Warnings About Small Backup Size**
+6. **Warnings About Small Backup Size**
    - If you see warnings about unusually small backup files, verify that:
      - The WordPress folder contains the expected files
      - The database is not empty

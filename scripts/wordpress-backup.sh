@@ -48,11 +48,27 @@ BACKUP_FOLDER="/path/to/wordpress-backups"
 # LOG_FILE="/custom/path/to/backup.log"
 MAX_BACKUPS=8                         # Maximum number of backups to keep
 USE_NO_TABLESPACES=1                  # Set to 1 to use "--no-tablespaces", 0 to disable
+                                      # Recommended: 1 (enabled) for shared hosting (IONOS, all-inkl, etc.)
+                                      # Required for MySQL 8.0+ users without PROCESS privilege
+                                      # Set to 0 only if you have full MySQL privileges and need tablespace data
+
+# Compression method: none, gzip, zip, bzip2
+# - none: No compression (tar/sql output)
+# - gzip: Standard compression (recommended default)
+# - zip: ZIP format (database keeps timestamped SQL filename inside archive)
+# - bzip2: Better compression ratio but slower
+COMPRESSION_METHOD="gzip"
+
+# Use nice for tar command (reduces CPU priority)
+# Only applies to tar-based methods: none, gzip, bzip2
+# 1 = enabled (default, recommended for shared hosting)
+# 0 = disabled (for powerful hosts or tight cron windows)
+USE_NICE_FOR_TAR=1
 
 # Excluded files/folders for the file archive (relative to WP_FOLDER)
-# Modify this list to adjust which paths are excluded from the zip archive
+# Modify this list to adjust which paths are excluded from file archives
 # Note: This is a space-separated list in the config file
-# Default: empty (no excludes) - set to empty string to exclude nothing
+# Default: empty (no excludes) - leave empty or set to "" to exclude nothing
 # Example: EXCLUDES="wp-content/cache wp-content/upgrade wp-content/backups"
 # EXCLUDES=""
 
@@ -80,8 +96,19 @@ WP_FOLDER="${WP_FOLDER:-/path/to/wordpress}"
 BACKUP_FOLDER="${BACKUP_FOLDER:-/path/to/wordpress-backups}"
 MAX_BACKUPS="${MAX_BACKUPS:-8}"
 USE_NO_TABLESPACES="${USE_NO_TABLESPACES:-1}"
+COMPRESSION_METHOD="${COMPRESSION_METHOD:-gzip}"
+USE_NICE_FOR_TAR="${USE_NICE_FOR_TAR:-1}"
 SEND_EMAIL_ON_ERROR="${SEND_EMAIL_ON_ERROR:-1}"
 EMAIL_SUBJECT_DEFAULT="${EMAIL_SUBJECT_DEFAULT:-WordPress Backup Error Report}"
+
+# Backward compatibility: allow legacy ENABLE_COMPRESSION to map to COMPRESSION_METHOD
+if [ -z "$COMPRESSION_METHOD" ] && [ -n "$ENABLE_COMPRESSION" ]; then
+  if [ "$ENABLE_COMPRESSION" -eq 1 ]; then
+    COMPRESSION_METHOD="gzip"
+  else
+    COMPRESSION_METHOD="none"
+  fi
+fi
 
 # Excludes (default: empty - no excludes)
 # If EXCLUDES is not set in config file, no excludes will be used
@@ -102,6 +129,28 @@ SMTP_HOST="${SMTP_HOST:-mail.yourdomain.tld}"
 SMTP_PORT="${SMTP_PORT:-587}"
 SMTP_USER="${SMTP_USER:-backup@mydomain.de}"
 SMTP_PASS="${SMTP_PASS:-your_password}"
+
+# Check if compression method is available on this system
+check_compression_method() {
+  local method="$1"
+  case "$method" in
+    "gzip")
+      command -v gzip >/dev/null 2>&1
+      ;;
+    "bzip2")
+      command -v bzip2 >/dev/null 2>&1
+      ;;
+    "zip")
+      command -v zip >/dev/null 2>&1
+      ;;
+    "none")
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
 
 # Parse EXCLUDES from config (space-separated string to array)
 # EXCLUDES already has default value set above (if not set in config)
@@ -160,6 +209,11 @@ early_error_exit() {
   
   exit 1
 }
+
+# Validate compression method and stop on error
+if ! check_compression_method "$COMPRESSION_METHOD"; then
+  early_error_exit "Compression method '$COMPRESSION_METHOD' is invalid or not available on this system."
+fi
 
 # Validate that critical variables are set (not using placeholder values)
 if [ "$WP_FOLDER" = "/path/to/wordpress" ] || [ -z "$WP_FOLDER" ]; then
@@ -319,23 +373,33 @@ mkdir -p "$BACKUP_TARGET" || {
 log_message "Starting backup for $TIMESTAMP..."
 log_message "WordPress folder: $WP_FOLDER"
 log_message "Backup target folder: $BACKUP_TARGET"
+log_message "Compression method: $COMPRESSION_METHOD"
+log_message "USE_NICE_FOR_TAR: $USE_NICE_FOR_TAR"
 
-# Step 1: Create a zipped backup of the WordPress folder
-ZIP_FILE="$BACKUP_TARGET/files.zip"
-
-# Build zip exclude flags from EXCLUDES_ARRAY
-ZIP_EXCLUDES=""
-if [ ${#EXCLUDES_ARRAY[@]} -gt 0 ]; then
-  for path in "${EXCLUDES_ARRAY[@]}"; do
-    # zip -x requires paths relative to the source directory
-    # Escape special characters and add wildcard for directories
-    ZIP_EXCLUDES+=" -x \"${path}/*\""
-  done
-  log_message "Excluding paths: ${EXCLUDES_ARRAY[*]}"
-fi
+# Step 1: Create a file backup archive using the configured compression method
+case "$COMPRESSION_METHOD" in
+  "gzip")
+    FILES_ARCHIVE="$BACKUP_TARGET/files.tar.gz"
+    ;;
+  "bzip2")
+    FILES_ARCHIVE="$BACKUP_TARGET/files.tar.bz2"
+    ;;
+  "zip")
+    FILES_ARCHIVE="$BACKUP_TARGET/files.zip"
+    ;;
+  "none")
+    FILES_ARCHIVE="$BACKUP_TARGET/files.tar"
+    ;;
+  *)
+    log_message "ERROR: Unknown compression method: $COMPRESSION_METHOD"
+    send_email_if_error
+    exit 1
+    ;;
+esac
 
 log_message "Starting file backup (this may take a while for large projects)..."
-log_message "Archive target: $ZIP_FILE"
+log_message "Archive target: $FILES_ARCHIVE"
+log_message "Compression method for files: $COMPRESSION_METHOD"
 
 # Change working directory to parent of WP_FOLDER to ensure relative paths work correctly
 WP_FOLDER_PARENT=$(dirname "$WP_FOLDER")
@@ -346,35 +410,92 @@ cd "$WP_FOLDER_PARENT" || {
   exit 1
 }
 
-# Create zip archive with excludes (if any)
-# Use absolute path for ZIP_FILE and relative path for source directory
-ZIP_CMD="zip -r \"$ZIP_FILE\" \"$WP_FOLDER_BASENAME\"$ZIP_EXCLUDES"
+# Build tar command with optional nice for tar-based methods
+TAR_CMD="tar"
+if [ "$USE_NICE_FOR_TAR" -eq 1 ] && command -v nice >/dev/null 2>&1 && [ "$COMPRESSION_METHOD" != "zip" ]; then
+  TAR_CMD="nice -n 19 tar"
+  log_message "Using nice for tar command (reduced priority)"
+fi
 
-if eval "$ZIP_CMD" > /dev/null 2>&1; then
+ARCHIVE_OUTPUT=""
+ARCHIVE_EXIT_CODE=1
+
+case "$COMPRESSION_METHOD" in
+  "gzip"|"bzip2"|"none")
+    # Build tar exclude flags from EXCLUDES_ARRAY
+    TAR_EXCLUDES=""
+    if [ ${#EXCLUDES_ARRAY[@]} -gt 0 ]; then
+      for path in "${EXCLUDES_ARRAY[@]}"; do
+        TAR_EXCLUDES+=" --exclude=${WP_FOLDER_BASENAME}/${path}"
+      done
+      log_message "Excluding paths: ${EXCLUDES_ARRAY[*]}"
+    fi
+
+    case "$COMPRESSION_METHOD" in
+      "gzip")
+        ARCHIVE_OUTPUT=$($TAR_CMD -czf "$FILES_ARCHIVE" $TAR_EXCLUDES --warning=no-file-ignored "$WP_FOLDER_BASENAME" 2>&1)
+        ARCHIVE_EXIT_CODE=$?
+        ;;
+      "bzip2")
+        ARCHIVE_OUTPUT=$($TAR_CMD -cjf "$FILES_ARCHIVE" $TAR_EXCLUDES --warning=no-file-ignored "$WP_FOLDER_BASENAME" 2>&1)
+        ARCHIVE_EXIT_CODE=$?
+        ;;
+      "none")
+        ARCHIVE_OUTPUT=$($TAR_CMD -cf "$FILES_ARCHIVE" $TAR_EXCLUDES --warning=no-file-ignored "$WP_FOLDER_BASENAME" 2>&1)
+        ARCHIVE_EXIT_CODE=$?
+        ;;
+    esac
+    ;;
+  "zip")
+    if [ "$USE_NICE_FOR_TAR" -eq 1 ]; then
+      log_message "USE_NICE_FOR_TAR is enabled but not applied for zip method."
+    fi
+    # Build zip exclude flags from EXCLUDES_ARRAY
+    ZIP_EXCLUDES=""
+    if [ ${#EXCLUDES_ARRAY[@]} -gt 0 ]; then
+      for path in "${EXCLUDES_ARRAY[@]}"; do
+        ZIP_EXCLUDES+=" -x \"${WP_FOLDER_BASENAME}/${path}/*\""
+      done
+      log_message "Excluding paths: ${EXCLUDES_ARRAY[*]}"
+    fi
+
+    ZIP_CMD="zip -r \"$FILES_ARCHIVE\" \"$WP_FOLDER_BASENAME\"$ZIP_EXCLUDES"
+    ARCHIVE_OUTPUT=$(eval "$ZIP_CMD" 2>&1)
+    ARCHIVE_EXIT_CODE=$?
+    ;;
+esac
+
+if [ $ARCHIVE_EXIT_CODE -eq 0 ]; then
   # Return to script directory
   cd "$SCRIPT_DIR" || true
   # Verify the archive was created and is not empty
-  if [ ! -f "$ZIP_FILE" ]; then
-    log_message "ERROR: Archive file was not created: $ZIP_FILE"
+  if [ ! -f "$FILES_ARCHIVE" ]; then
+    log_message "ERROR: Archive file was not created: $FILES_ARCHIVE"
     send_email_if_error
     exit 1
   fi
   
   # Get file size using stat (more reliable in shared hosting)
-  ZIP_SIZE_BYTES=$(stat -c %s "$ZIP_FILE" 2>/dev/null || echo "0")
-  ZIP_SIZE=$(echo "$ZIP_SIZE_BYTES" | awk '{if($1>1024*1024*1024) printf "%.1fG", $1/1024/1024/1024; else if($1>1024*1024) printf "%.1fM", $1/1024/1024; else if($1>1024) printf "%.1fK", $1/1024; else printf "%dB", $1}' || echo "unknown")
+  FILES_SIZE_BYTES=$(stat -c %s "$FILES_ARCHIVE" 2>/dev/null || echo "0")
+  FILES_SIZE=$(echo "$FILES_SIZE_BYTES" | awk '{if($1>1024*1024*1024) printf "%.1fG", $1/1024/1024/1024; else if($1>1024*1024) printf "%.1fM", $1/1024/1024; else if($1>1024) printf "%.1fK", $1/1024; else printf "%dB", $1}' || echo "unknown")
   
   # Check if archive seems too small (less than 100MB might indicate incomplete backup)
-  if [ "$ZIP_SIZE_BYTES" -lt 104857600 ] && [ "$ZIP_SIZE_BYTES" -gt 0 ]; then
-    log_message "WARNING: Archive size seems unusually small: $ZIP_SIZE ($ZIP_SIZE_BYTES bytes)"
+  if [ "$FILES_SIZE_BYTES" -lt 104857600 ] && [ "$FILES_SIZE_BYTES" -gt 0 ]; then
+    log_message "WARNING: Archive size seems unusually small: $FILES_SIZE ($FILES_SIZE_BYTES bytes)"
     log_message "This might indicate an incomplete backup. Please verify manually."
   fi
   
-  log_message "WordPress files successfully backed up: $ZIP_FILE (Size: $ZIP_SIZE)"
+  log_message "WordPress files successfully backed up: $FILES_ARCHIVE (Size: $FILES_SIZE)"
+  if [ -n "$ARCHIVE_OUTPUT" ]; then
+    log_message "Archive command output: $ARCHIVE_OUTPUT"
+  fi
 else
   # Return to script directory even on error
   cd "$SCRIPT_DIR" || true
-  log_message "ERROR: WordPress files backup FAILED!"
+  log_message "ERROR: WordPress files backup FAILED! (exit code: $ARCHIVE_EXIT_CODE)"
+  if [ -n "$ARCHIVE_OUTPUT" ]; then
+    log_message "Archive error output: $ARCHIVE_OUTPUT"
+  fi
   send_email_if_error
   exit 1
 fi
@@ -382,7 +503,26 @@ fi
 # Step 2: Create a database backup using mysqldump
 log_message "Creating database backup using mysqldump..."
 
-DB_BACKUP_FILE="$BACKUP_TARGET/database.sql.gz"
+# Determine database backup filename based on compression method
+case "$COMPRESSION_METHOD" in
+  "gzip")
+    DB_BACKUP_FILE="$BACKUP_TARGET/database.sql.gz"
+    ;;
+  "bzip2")
+    DB_BACKUP_FILE="$BACKUP_TARGET/database.sql.bz2"
+    ;;
+  "zip")
+    DB_BACKUP_FILE="$BACKUP_TARGET/database.sql.zip"
+    ;;
+  "none")
+    DB_BACKUP_FILE="$BACKUP_TARGET/database.sql"
+    ;;
+  *)
+    log_message "ERROR: Unknown compression method for database backup: $COMPRESSION_METHOD"
+    send_email_if_error
+    exit 1
+    ;;
+esac
 
 # Build tablespace option based on configuration
 if [ "$USE_NO_TABLESPACES" -eq 1 ]; then
@@ -395,9 +535,34 @@ fi
 # Capture stderr separately to capture any error messages
 MYSQLDUMP_ERR_FILE="$BACKUP_TARGET/mysqldump_error.log"
 
-# Compressed backup (WordPress always uses gzip)
-mysqldump -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" $TABLESPACE_OPTION "$DB_NAME" 2> "$MYSQLDUMP_ERR_FILE" | gzip > "$DB_BACKUP_FILE"
-MYSQLDUMP_EXIT_CODE=${PIPESTATUS[0]}
+case "$COMPRESSION_METHOD" in
+  "gzip")
+    mysqldump -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" $TABLESPACE_OPTION "$DB_NAME" 2> "$MYSQLDUMP_ERR_FILE" | gzip > "$DB_BACKUP_FILE"
+    MYSQLDUMP_EXIT_CODE=${PIPESTATUS[0]}
+    ;;
+  "bzip2")
+    mysqldump -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" $TABLESPACE_OPTION "$DB_NAME" 2> "$MYSQLDUMP_ERR_FILE" | bzip2 > "$DB_BACKUP_FILE"
+    MYSQLDUMP_EXIT_CODE=${PIPESTATUS[0]}
+    ;;
+  "none")
+    mysqldump -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" $TABLESPACE_OPTION "$DB_NAME" > "$DB_BACKUP_FILE" 2> "$MYSQLDUMP_ERR_FILE"
+    MYSQLDUMP_EXIT_CODE=$?
+    ;;
+  "zip")
+    # Keep timestamp in the internal SQL filename inside the ZIP archive.
+    TEMP_SQL_FILE="$BACKUP_TARGET/database-$TIMESTAMP.sql"
+    mysqldump -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" $TABLESPACE_OPTION "$DB_NAME" > "$TEMP_SQL_FILE" 2> "$MYSQLDUMP_ERR_FILE"
+    MYSQLDUMP_EXIT_CODE=$?
+    if [ $MYSQLDUMP_EXIT_CODE -eq 0 ]; then
+      zip -q "$DB_BACKUP_FILE" "$TEMP_SQL_FILE" 2>> "$MYSQLDUMP_ERR_FILE"
+      ZIP_EXIT_CODE=$?
+      rm -f "$TEMP_SQL_FILE" 2>/dev/null || true
+      if [ $ZIP_EXIT_CODE -ne 0 ]; then
+        MYSQLDUMP_EXIT_CODE=$ZIP_EXIT_CODE
+      fi
+    fi
+    ;;
+esac
 
 if [ $MYSQLDUMP_EXIT_CODE -eq 0 ]; then
   # Verify the backup file was created and is not empty

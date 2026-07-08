@@ -20,8 +20,21 @@ USE_NO_TABLESPACES=1                  # Set to 1 to use "--no-tablespaces", 0 to
                                       # Required for MySQL 8.0+ users without PROCESS privilege
                                       # Set to 0 only if you have full MySQL privileges and need tablespace data
 
+# Compression method: none, gzip, zip, bzip2
+# - none: No compression (tar/sql output)
+# - gzip: Standard compression (recommended default)
+# - zip: ZIP format (database keeps timestamped SQL filename inside archive)
+# - bzip2: Better compression ratio but slower
+COMPRESSION_METHOD="gzip"
+
+# Use nice for tar command (reduces CPU priority)
+# Only applies to tar-based methods: none, gzip, bzip2
+# 1 = enabled (default, recommended for shared hosting)
+# 0 = disabled (for powerful hosts or tight cron windows)
+USE_NICE_FOR_TAR=1
+
 # Excluded files/folders for the file archive (relative to WP_FOLDER)
-# Modify this list to adjust which paths are excluded from the zip archive
+# Modify this list to adjust which paths are excluded from file archives
 # Note: This is a space-separated list in the config file
 # Default: empty (no excludes) - leave empty or set to "" to exclude nothing
 # Example: EXCLUDES="wp-content/cache wp-content/upgrade wp-content/backups"
