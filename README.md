@@ -54,7 +54,6 @@ Notes:
 
 - For `zip` DB backups, the internal SQL filename keeps a timestamp.
 - Missing/invalid method or missing tool stops the script with an error.
-- Legacy `ENABLE_COMPRESSION` is still mapped (`1` to `gzip`, `0` to `none`).
 
 ---
 

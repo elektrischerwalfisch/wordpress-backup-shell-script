@@ -101,15 +101,6 @@ USE_NICE_FOR_TAR="${USE_NICE_FOR_TAR:-1}"
 SEND_EMAIL_ON_ERROR="${SEND_EMAIL_ON_ERROR:-1}"
 EMAIL_SUBJECT_DEFAULT="${EMAIL_SUBJECT_DEFAULT:-WordPress Backup Error Report}"
 
-# Backward compatibility: allow legacy ENABLE_COMPRESSION to map to COMPRESSION_METHOD
-if [ -z "$COMPRESSION_METHOD" ] && [ -n "$ENABLE_COMPRESSION" ]; then
-  if [ "$ENABLE_COMPRESSION" -eq 1 ]; then
-    COMPRESSION_METHOD="gzip"
-  else
-    COMPRESSION_METHOD="none"
-  fi
-fi
-
 # Excludes (default: empty - no excludes)
 # If EXCLUDES is not set in config file, no excludes will be used
 # If EXCLUDES is set to empty string (EXCLUDES="") in config, no excludes will be used
