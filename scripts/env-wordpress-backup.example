@@ -1,0 +1,43 @@
+# WordPress Backup Configuration File - Example Template
+# 
+# Copy this file to .env-wordpress-backup and update the values below.
+# The .env-wordpress-backup file is excluded from version control for security.
+#
+# To set up:
+# 1. Copy this file: cp env-wordpress-backup.example .env-wordpress-backup
+# 2. Edit .env-wordpress-backup and update all placeholder values
+# 3. Set secure permissions: chmod 600 .env-wordpress-backup
+
+# WordPress and backup paths (use absolute paths!)
+WP_FOLDER="/path/to/wordpress"
+BACKUP_FOLDER="/path/to/wordpress-backups"
+# LOG_FILE will be set automatically to $BACKUP_FOLDER/backup.log if not specified
+# You can override it with an absolute path if needed
+# LOG_FILE="/custom/path/to/backup.log"
+MAX_BACKUPS=8                         # Maximum number of backups to keep
+USE_NO_TABLESPACES=1                  # Set to 1 to use "--no-tablespaces", 0 to disable
+                                      # Recommended: 1 (enabled) for shared hosting (IONOS, all-inkl, etc.)
+                                      # Required for MySQL 8.0+ users without PROCESS privilege
+                                      # Set to 0 only if you have full MySQL privileges and need tablespace data
+
+# Excluded files/folders for the file archive (relative to WP_FOLDER)
+# Modify this list to adjust which paths are excluded from the zip archive
+# Note: This is a space-separated list in the config file
+# Default: empty (no excludes) - leave empty or set to "" to exclude nothing
+# Example: EXCLUDES="wp-content/cache wp-content/upgrade wp-content/backups"
+# EXCLUDES=""
+
+# Email notification settings
+SEND_EMAIL_ON_ERROR=1                 # Set to 1 to enable email notification on errors
+EMAIL_SUBJECT_DEFAULT="WordPress Backup Error Report for www.mydomain.de"
+
+# SMTP settings for shared hosting
+SMTP_HOST="mail.yourdomain.tld"
+SMTP_PORT="587"
+SMTP_USER="backup@yourdomain.tld"
+SMTP_PASS="your_password"
+
+# Email addresses
+EMAIL_FROM="backup@yourdomain.tld"
+EMAIL_TO="info@yourdomain.tld"
+

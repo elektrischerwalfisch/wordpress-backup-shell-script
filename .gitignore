@@ -1,0 +1,6 @@
+.vscode
+.cursorignore
+docs/
+
+scripts/.env*
+trigger/.htaccess
