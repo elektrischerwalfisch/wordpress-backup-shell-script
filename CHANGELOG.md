@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- docs: Add MIT LICENSE file for public repository release
 - docs: Highlight server-side and SSH-free usage in README
 - refactor: Remove legacy ENABLE_COMPRESSION compatibility from script and docs
 - docs: Simplify README structure and reduce setup verbosity
