@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-08
+
+- chore: Bump version to 1.0.0
 - docs: Add MIT LICENSE file for public repository release
 - docs: Highlight server-side and SSH-free usage in README
 - refactor: Remove legacy ENABLE_COMPRESSION compatibility from script and docs
