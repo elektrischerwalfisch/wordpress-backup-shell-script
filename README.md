@@ -91,8 +91,13 @@ Config options in the file:
 
 - `$shellScriptPath`: default `../scripts/wordpress-backup.sh`
 - `$executionMode`:
-  - `sync`: waits for completion, returns output
-  - `background`: starts detached process, returns PID
+  - `sync`: waits for completion (works well on all-inkl)
+  - `background`: starts detached process (recommended on IONOS for large backups)
+- `$debugMode`:
+  - `false` (default): minimal HTTP output (`Process started`, `Process finished`, or `Error`)
+  - `true`: verbose HTTP output for troubleshooting (see [Minimal Troubleshooting](#minimal-troubleshooting))
+
+By default, the trigger returns minimal HTTP messages only. Full diagnostics are written to `BACKUP_FOLDER/backup.log`.
 
 ---
 
@@ -103,6 +108,8 @@ Static `.htaccess` IP allowlists for shared-hosting cronjobs are unreliable beca
 Current policy:
 
 - keep trigger exposure minimal
+- keep `$debugMode = false` in production (minimal HTTP responses only)
+- use `backup.log` for diagnostics, not the HTTP response body
 - monitor access via logs
 - do not treat static IP allowlists as primary protection
 
@@ -130,6 +137,10 @@ Issue draft:
   - Confirm `curl` or `sendmail` availability
 - **Backups too large**
   - Use `EXCLUDES` for cache/temporary folders
+- **Trigger returns only `Error` with no details**
+  - Check `BACKUP_FOLDER/backup.log` for the full error log
+  - If you need more detail in the HTTP response (e.g. without log access), set `$debugMode = true` in `trigger/wordpress-backup.php` temporarily
+  - Set `$debugMode` back to `false` when done (required for production/cron)
 
 ---
 

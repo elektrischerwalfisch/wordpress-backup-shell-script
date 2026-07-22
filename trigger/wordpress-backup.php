@@ -25,9 +25,35 @@
 $shellScriptPath = __DIR__ . "/../scripts/wordpress-backup.sh";
 
 // Execution mode: 'sync' or 'background'
-// - 'sync': Waits for script completion, returns full output (default, works on all-inkl)
-// - 'background': Runs script in background, returns PID (recommended for IONOS to avoid timeouts)
+// - 'sync': Waits for script completion (default, works on all-inkl)
+// - 'background': Runs script in background (recommended for IONOS to avoid timeouts)
+// HTTP response detail depends on $debugMode (see below).
 $executionMode = 'sync'; // Change to 'background' for IONOS
+
+// SECURITY: In production/cron, $debugMode MUST stay false (minimal HTTP output).
+// Use true only for initial setup or troubleshooting; details are in backup.log.
+$debugMode = false;
+
+// Minimal HTTP responses (used when $debugMode is false)
+$minimalMessageStarted = "Process started\n";
+$minimalMessageFinished = "Process finished\n";
+$minimalMessageError = "Error\n";
+
+// ============================================================================
+// OUTPUT HELPERS
+// ============================================================================
+
+function triggerRespondSuccess(string $minimalMessage, bool $debugMode, ?string $verboseMessage = null): void
+{
+    echo ($debugMode && $verboseMessage !== null) ? $verboseMessage : $minimalMessage;
+}
+
+function triggerRespondError(int $httpCode, string $minimalMessage, bool $debugMode, ?string $verboseMessage = null): void
+{
+    http_response_code($httpCode);
+    echo ($debugMode && $verboseMessage !== null) ? $verboseMessage : $minimalMessage;
+    exit(1);
+}
 
 // ============================================================================
 // SCRIPT VALIDATION
@@ -38,12 +64,11 @@ $shellScript = realpath($shellScriptPath);
 
 // Check if script exists
 if (!$shellScript || !file_exists($shellScript)) {
-    http_response_code(500);
-    echo "ERROR: Script file not found: $shellScriptPath";
+    $verboseMessage = "ERROR: Script file not found: $shellScriptPath";
     if ($shellScript) {
-        echo " (resolved to: $shellScript)";
+        $verboseMessage .= " (resolved to: $shellScript)";
     }
-    exit(1);
+    triggerRespondError(500, $minimalMessageError, $debugMode, $verboseMessage);
 }
 
 // Try to set execute permissions (won't work if PHP doesn't have write access)
@@ -67,15 +92,16 @@ if ($executionMode === 'background') {
     
     if (!empty($output) && is_numeric(trim($output[0]))) {
         $pid = trim($output[0]);
-        echo "SUCCESS: Backup script started in background (PID: $pid).\n\n";
-        echo "The backup is now running. Check BACKUP_FOLDER/backup.log for progress.\n";
+        $verboseMessage = "SUCCESS: Backup script started in background (PID: $pid).\n\n"
+            . "The backup is now running. Check BACKUP_FOLDER/backup.log for progress.\n";
+        triggerRespondSuccess($minimalMessageStarted, $debugMode, $verboseMessage);
     } else {
-        http_response_code(500);
-        echo "ERROR: Could not start backup in background.\n";
-        echo "Please check if setsid is available on your system.\n";
-        echo "If background execution is not available, change \$executionMode to 'sync' in the configuration.\n";
-        echo $errorHint;
-        echo $logHint;
+        $verboseMessage = "ERROR: Could not start backup in background.\n"
+            . "Please check if setsid is available on your system.\n"
+            . "If background execution is not available, change \$executionMode to 'sync' in the configuration.\n"
+            . $errorHint
+            . $logHint;
+        triggerRespondError(500, $minimalMessageError, $debugMode, $verboseMessage);
     }
 } else {
     // Synchronous execution (default, works on all-inkl)
@@ -85,15 +111,16 @@ if ($executionMode === 'background') {
     
     // Return results
     if ($returnCode === 0) {
-        echo "SUCCESS: Backup script completed successfully.\n\n";
-        echo "Output:\n";
-        echo implode("\n", $output);
+        $verboseMessage = "SUCCESS: Backup script completed successfully.\n\n"
+            . "Output:\n"
+            . implode("\n", $output);
+        triggerRespondSuccess($minimalMessageFinished, $debugMode, $verboseMessage);
     } else {
-        http_response_code(500);
-        echo "ERROR: Backup script failed with exit code $returnCode.\n\n";
-        echo $errorHint;
-        echo $logHint . "\n";
-        echo "Output:\n";
-        echo implode("\n", $output);
+        $verboseMessage = "ERROR: Backup script failed with exit code $returnCode.\n\n"
+            . $errorHint
+            . $logHint . "\n"
+            . "Output:\n"
+            . implode("\n", $output);
+        triggerRespondError(500, $minimalMessageError, $debugMode, $verboseMessage);
     }
 }
