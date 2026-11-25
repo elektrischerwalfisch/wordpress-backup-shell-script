@@ -4,7 +4,7 @@
 # WordPress Backup Shell Script (Universal)
 # ============================================================================
 # Script Name:    wordpress-backup.sh
-# Version:        1.1.0
+# Version:        1.2.0-beta.1
 # Description:    Automates the backup of WordPress project files and database 
 #                 with logging and error reporting.
 # Developed for:  Shared hosting environments
@@ -85,6 +85,12 @@ SMTP_PASS="your_password"
 # Email addresses
 EMAIL_FROM="backup@yourdomain.tld"
 EMAIL_TO="info@yourdomain.tld"
+
+# PHP trigger shared secret (URL cron / header auth)
+# Required when calling trigger/wordpress-backup.php via HTTP
+# Prefer A–Z a–z 0–9 - _ (avoid & = ? # + % space in URLs)
+# Leave empty only if you never use the PHP trigger
+TRIGGER_TOKEN="CHANGE_ME_LONG_RANDOM_STRING"
 EOF
   chmod 600 "$CONFIG_FILE" 2>/dev/null || true
   echo "WARNING: Configuration file $CONFIG_FILE was missing and has been created with placeholder values." >&2

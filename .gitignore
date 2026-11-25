@@ -2,5 +2,10 @@
 .cursorignore
 docs/
 
+AGENTS.md
+MEMORY.md
+ROADMAP.md
+.cursor/
+
 scripts/.env*
 trigger/.htaccess

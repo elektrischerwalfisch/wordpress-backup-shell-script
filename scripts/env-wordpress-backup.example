@@ -54,3 +54,9 @@ SMTP_PASS="your_password"
 EMAIL_FROM="backup@yourdomain.tld"
 EMAIL_TO="info@yourdomain.tld"
 
+# PHP trigger shared secret (URL cron / header auth)
+# Required when calling trigger/wordpress-backup.php via HTTP
+# Prefer A–Z a–z 0–9 - _ (avoid & = ? # + % space in URLs)
+# Leave empty only if you never use the PHP trigger
+TRIGGER_TOKEN="CHANGE_ME_LONG_RANDOM_STRING"
+

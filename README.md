@@ -20,13 +20,13 @@ Developed for shared hosting, tested on all-inkl and IONOS.
    - `WP_FOLDER`
    - `BACKUP_FOLDER`
    - `COMPRESSION_METHOD`
+   - `TRIGGER_TOKEN` if you use the PHP trigger (long random secret)
    - email settings (`SMTP_*`, `EMAIL_FROM`, `EMAIL_TO`) if notifications are required
 4. Run one test backup and check log output.
    - With SSH: run `scripts/wordpress-backup.sh`.
-   - Without SSH: execute `trigger/wordpress-backup.php` via URL.
+   - Without SSH: call the trigger URL with your token (see [Trigger Security](#trigger-security)).
    - In both cases, verify the result in `backup.log`.
-5. Review [Trigger Security](#trigger-security-current-limitations-and-todo) before exposing the trigger via URL.
-6. Automate via cron (shell cron if SSH is available, otherwise URL cron via trigger).
+5. Automate via cron (shell cron if SSH is available, otherwise URL cron via trigger with token).
 
 ---
 
@@ -45,7 +45,7 @@ This tool is **not part of the WordPress installation**. Deploy it in a **separa
 ├── wordpress-backup-shell-script/       ← this repository (separate location)
 │   ├── scripts/
 │   │   ├── wordpress-backup.sh
-│   │   └── .env-wordpress-backup
+│   │   └── .env-wordpress-backup        ← includes TRIGGER_TOKEN (gitignored)
 │   └── trigger/
 │       └── wordpress-backup.php
 └── wordpress-backups/                   ← BACKUP_FOLDER
@@ -85,10 +85,12 @@ Main variables in `scripts/.env-wordpress-backup`:
 - `SEND_EMAIL_ON_ERROR`: `1` or `0`
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`
 - `EMAIL_FROM`, `EMAIL_TO`, `EMAIL_SUBJECT_DEFAULT`
+- `TRIGGER_TOKEN`: shared secret for the PHP trigger (required for URL/cron calls)
 
 Security note:
 
-- `.env-wordpress-backup` contains credentials. Keep permissions at `600`.
+- `.env-wordpress-backup` contains credentials and `TRIGGER_TOKEN`. Keep permissions at `600`.
+- Never expose `scripts/` via web URL.
 
 ---
 
@@ -96,9 +98,15 @@ Security note:
 
 `trigger/wordpress-backup.php` is useful when SSH execution is not available.
 
-Config options in the file:
+Setup:
+
+1. Set `TRIGGER_TOKEN` in `scripts/.env-wordpress-backup` (prefer `A–Z a–z 0–9 - _`)
+2. Call the URL with that token (query or header)
+
+Config options in `wordpress-backup.php`:
 
 - `$shellScriptPath`: default `../scripts/wordpress-backup.sh`
+- `$envFilePath`: default `../scripts/.env-wordpress-backup` (must contain `TRIGGER_TOKEN`)
 - `$executionMode`:
   - `sync`: waits for completion (works well on all-inkl)
   - `background`: starts detached process (recommended on IONOS for large backups)
@@ -110,22 +118,28 @@ By default, the trigger returns minimal HTTP messages only. Full diagnostics are
 
 ---
 
-## Trigger Security (Current Limitations and TODO)
+## Trigger Security
 
-Static `.htaccess` IP allowlists for shared-hosting cronjobs are unreliable because cronjob source IPs can change.
+Primary protection is a **shared-secret token** in `.env-wordpress-backup` (does not depend on cron source IPs).
 
-Current policy:
+### Token setup
 
-- keep trigger exposure minimal
+1. Set `TRIGGER_TOKEN` in `scripts/.env-wordpress-backup` (same file as other secrets; gitignored)
+2. Cron / caller must send the same value:
+   - Query: `https://backup.example/trigger/wordpress-backup.php?token=YOUR_TOKEN`
+   - Or header: `X-Backup-Token: YOUR_TOKEN`
+
+### Rotation
+
+Generate a new random `TRIGGER_TOKEN`, update `.env-wordpress-backup`, then update the cron URL/header. Old URLs stop working immediately.
+
+### Policy
+
+- keep trigger exposure minimal (separate cron URL/subdomain)
 - keep `$debugMode = false` in production (minimal HTTP responses only)
-- use `backup.log` for diagnostics, not the HTTP response body
-- monitor access via logs
-- do not treat static IP allowlists as primary protection
-
-TODO:
-
-- implement a stable trigger authentication mechanism that does not rely on fixed source IPs
-- document the final approach in this README
+- use `backup.log` for backup diagnostics, not the HTTP response body
+- failed auth returns HTTP **403** and body `Forbidden` when debug is off
+- do **not** treat static `.htaccess` IP allowlists as primary protection (cron IPs on shared hosting can change); optional IP rules are supplementary at best
 
 ---
 
@@ -153,6 +167,10 @@ TODO:
   - Check `BACKUP_FOLDER/backup.log` for the full error log
   - If you need more detail in the HTTP response (e.g. without log access), set `$debugMode = true` in `trigger/wordpress-backup.php` temporarily
   - Set `$debugMode` back to `false` when done (required for production/cron)
+- **Trigger returns `Forbidden` (HTTP 403)**
+  - Ensure `scripts/.env-wordpress-backup` exists and is readable by PHP
+  - Ensure `TRIGGER_TOKEN` is non-empty and matches `?token=` or `X-Backup-Token`
+  - With `$debugMode = true`, the HTTP body names the auth failure reason
 
 ---
 
