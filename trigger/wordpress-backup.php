@@ -3,7 +3,7 @@
  * WordPress Backup Trigger Script
  *
  * Script Name:   wordpress-backup.php
- * Version:       1.2.0-beta.1
+ * Version:       1.2.0
  * Description:   Sets execute permissions on the backup script and runs it
  *                via PHP when SSH/chmod is unavailable.
  * Author:        elektrischerwalfisch

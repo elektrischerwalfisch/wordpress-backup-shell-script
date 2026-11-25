@@ -4,7 +4,7 @@
 # WordPress Backup Shell Script (Universal)
 # ============================================================================
 # Script Name:    wordpress-backup.sh
-# Version:        1.2.0-beta.1
+# Version:        1.2.0
 # Description:    Automates the backup of WordPress project files and database 
 #                 with logging and error reporting.
 # Developed for:  Shared hosting environments

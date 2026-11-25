@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-25
+
+- chore: Bump version to 1.2.0
 - feat: Add TRIGGER_TOKEN authentication for the PHP URL trigger
 
 ## [1.1.0] - 2026-07-22
